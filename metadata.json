@@ -1,0 +1,6 @@
+{
+  "name": "ADMIN AI",
+  "description": "Smart Admin Department - Enterprise mobile-first platform featuring 11 Core Admin AI modules, Multi-Channel User Access, Section 3 AI Agent Coordinator, and Section 4 Future-Ready Integration Layer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

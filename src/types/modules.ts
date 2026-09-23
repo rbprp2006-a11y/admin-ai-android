@@ -133,13 +133,17 @@ export interface GatePassRecord {
 export interface HousekeepingTask {
   id: string;
   areaZone: string;
-  shift: 'Morning (07:00 - 15:00)' | 'General (09:00 - 18:00)' | 'Evening (14:00 - 22:00)' | 'Night Deep Clean';
+  areaName?: string;
+  shift: 'Morning (07:00 - 15:00)' | 'General (09:00 - 18:00)' | 'Evening (14:00 - 22:00)' | 'Night Deep Clean' | string;
   supervisor: string;
   assignedStaff: string;
-  checklists: { id: string; label: string; done: boolean }[];
+  checklists?: { id: string; label?: string; task?: string; done: boolean }[];
+  checklist?: { id: string; label?: string; task?: string; done: boolean }[];
   completionPercentage: number;
-  status: 'Pending' | 'In Progress' | 'Supervised & Passed' | 'Action Required';
+  status: 'Pending' | 'In Progress' | 'Supervised & Passed' | 'Action Required' | 'Completed' | string;
+  supervisorSignoff?: boolean;
   inspectionNotes?: string;
+  inspectionTimeSlot?: string;
   updatedAt: string;
 }
 
@@ -147,29 +151,38 @@ export interface HousekeepingTask {
 export interface UtilityMeterLog {
   id: string;
   meterId: string;
-  utilityType: 'Grid Electricity' | 'Solar Power' | 'Fresh Water Supply' | 'Diesel Generator';
-  currentReading: number;
-  unit: 'kWh' | 'kL' | 'Litres';
+  utilityType: 'Grid Electricity' | 'Solar Power' | 'Fresh Water Supply' | 'Diesel Generator' | 'Electricity' | 'Water' | 'Gas' | 'Solar' | string;
+  currentReading?: number;
+  unit: string;
   dailyConsumption: number;
   estimatedCost: number;
-  recordedDate: string;
-  status: 'Normal' | 'Peak Surge Alert' | 'Energy Efficient';
+  recordedDate?: string;
+  date?: string;
+  status?: 'Normal' | 'Peak Surge Alert' | 'Energy Efficient' | string;
+  alertThreshold?: number;
+  optimizationTip?: string;
+  peakAlertTriggered?: boolean;
   remarks?: string;
 }
+export type UtilityLog = UtilityMeterLog;
 
 // 10. Cafeteria AI
 export interface CafeteriaDailyLog {
   id: string;
   date: string;
-  mealType: 'Breakfast' | 'Executive Lunch' | 'Evening Tea & Snacks' | 'Night Shift Dinner';
-  expectedHeadcount: number;
+  mealType: 'Breakfast' | 'Lunch' | 'High Tea' | 'Dinner' | 'Executive Lunch' | 'Evening Tea & Snacks' | 'Night Shift Dinner' | string;
+  predictedHeadcount: number;
+  expectedHeadcount?: number;
   actualServed: number;
   foodWastageKg: number;
-  costPerMeal: number;
-  wasteReductionRate: number; // percentage
-  status: 'Log Finalized' | 'Audit Flagged' | 'Optimal';
+  contractorName: string;
+  feedbackRating: number;
+  costPerMeal?: number;
+  wasteReductionRate?: number; // percentage
+  status?: 'Log Finalized' | 'Audit Flagged' | 'Optimal' | string;
   notes?: string;
 }
+export type CafeteriaLog = CafeteriaDailyLog;
 
 // 11. Document AI
 export interface DocumentAiRecord {

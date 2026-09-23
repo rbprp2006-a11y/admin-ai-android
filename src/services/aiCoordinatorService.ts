@@ -230,8 +230,8 @@ export class AiCoordinatorService {
 
     // 2. APPROVALS / PENDING WORKFLOWS
     if (q.includes('approval') || q.includes('pending approval') || q.includes('review request')) {
-      const gatePasses = StorageService.getGatePasses().filter(g => g.approvalStatus === 'Pending');
-      const visitors = StorageService.getVisitorRecords().filter(v => !v.preApproved && v.status === 'Expected');
+      const gatePasses = StorageService.getGatePasses().filter(g => g.approvalStatus === 'Pending Approval' || (g.approvalStatus as string) === 'Pending');
+      const visitors = StorageService.getVisitorRecords().filter(v => !v.preApproved && ((v.status as string) === 'Expected' || v.status === 'Pre-Approved'));
       
       const count = gatePasses.length + visitors.length;
 
@@ -302,7 +302,7 @@ export class AiCoordinatorService {
     // 4. TRANSPORT & VEHICLE
     if (q.includes('vehicle') || q.includes('car') || q.includes('transport') || q.includes('driver') || q.includes('cab')) {
       const transport = StorageService.getTransportBookings();
-      const confirmed = transport.filter(t => t.status === 'Confirmed' || t.status === 'In Transit');
+      const confirmed = transport.filter(t => t.status === 'Scheduled' || t.status === 'On Route' || (t.status as string) === 'Confirmed' || (t.status as string) === 'In Transit');
 
       this.addActivityLog({
         user,
@@ -360,7 +360,7 @@ export class AiCoordinatorService {
     // 6. HOUSEKEEPING TASKS
     if (q.includes('housekeeping') || q.includes('cleaning') || q.includes('sanitation') || q.includes('washroom') || q.includes('restroom')) {
       const tasks = StorageService.getHousekeepingTasks();
-      const pending = tasks.filter(t => t.status !== 'Completed');
+      const pending = tasks.filter(t => t.status !== 'Completed' && (t.status as string) !== 'Supervised & Passed');
 
       this.addActivityLog({
         user,
@@ -374,7 +374,7 @@ export class AiCoordinatorService {
       });
 
       return {
-        responseMessage: `Housekeeping Duty Schedule Today:\n• Total Tasks: ${tasks.length}\n• Pending Sanitation Checks: ${pending.length}\n• Next Task: ${pending[0]?.areaName} (${pending[0]?.inspectionTimeSlot})\n• Assigned Staff: ${pending[0]?.assignedStaff}`,
+        responseMessage: `Housekeeping Duty Schedule Today:\n• Total Tasks: ${tasks.length}\n• Pending Sanitation Checks: ${pending.length}\n• Next Task: ${pending[0]?.areaName || pending[0]?.areaZone || 'Campus Central'}\n• Shift: ${pending[0]?.inspectionTimeSlot || pending[0]?.shift || 'Morning'}\n• Assigned Staff: ${pending[0]?.assignedStaff || 'On Duty'}`,
         intent: 'Housekeeping Status',
         moduleId: 'housekeeping',
         moduleName: 'Housekeeping & Facility AI',
@@ -389,7 +389,7 @@ export class AiCoordinatorService {
     // 7. ENERGY & UTILITIES
     if (q.includes('energy') || q.includes('power') || q.includes('consumption') || q.includes('solar') || q.includes('electricity') || q.includes('utility')) {
       const logs = StorageService.getUtilityLogs();
-      const highAlerts = logs.filter(l => l.peakAlertTriggered);
+      const highAlerts = logs.filter(l => l.peakAlertTriggered || l.status === 'Peak Surge Alert');
 
       this.addActivityLog({
         user,
@@ -599,8 +599,8 @@ export class AiCoordinatorService {
     const criticalComplaints = facilities.filter(f => f.priority === 'Critical').length;
     const activeVisitors = visitors.filter(v => v.status === 'Checked In').length;
     const expiringVendors = vendors.filter(v => v.amcStatus === 'Expiring Soon').length;
-    const pendingGatePasses = gatePasses.filter(g => g.approvalStatus === 'Pending').length;
-    const pendingCleaning = housekeeping.filter(h => h.status !== 'Completed').length;
+    const pendingGatePasses = gatePasses.filter(g => g.approvalStatus === 'Pending Approval' || (g.approvalStatus as string) === 'Pending').length;
+    const pendingCleaning = housekeeping.filter(h => h.status !== 'Completed' && (h.status as string) !== 'Supervised & Passed').length;
 
     const recommendations: ProcessImprovementRecommendation[] = [
       {

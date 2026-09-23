@@ -35,10 +35,11 @@ export const CafeteriaView: React.FC<Props> = ({ onBack, lang }) => {
   const [formError, setFormError] = useState('');
 
   const filteredLogs = logs.filter(item => {
-    const matchSearch =
-      item.mealType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.contractorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.date.includes(searchTerm);
+    const meal = (item.mealType || '').toLowerCase();
+    const contractor = (item.contractorName || '').toLowerCase();
+    const dateStr = item.date || '';
+    const q = searchTerm.toLowerCase();
+    const matchSearch = meal.includes(q) || contractor.includes(q) || dateStr.includes(q);
     const matchMeal = mealFilter === 'All' || item.mealType === mealFilter;
     return matchSearch && matchMeal;
   });
@@ -232,7 +233,12 @@ export const CafeteriaView: React.FC<Props> = ({ onBack, lang }) => {
           </div>
         ) : (
           filteredLogs.map((item) => {
-            const variance = item.actualServed - item.predictedHeadcount;
+            const predicted = item.predictedHeadcount || item.expectedHeadcount || 500;
+            const served = item.actualServed || 0;
+            const variance = served - predicted;
+            const rating = typeof item.feedbackRating === 'number' ? item.feedbackRating.toFixed(1) : '4.3';
+            const contractor = item.contractorName || 'Sodexo Food Solutions';
+            const progress = predicted > 0 ? Math.min(100, Math.round((served / predicted) * 100)) : 100;
             return (
               <div
                 key={item.id}
@@ -248,26 +254,26 @@ export const CafeteriaView: React.FC<Props> = ({ onBack, lang }) => {
                         {item.mealType}
                       </span>
                       <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
-                        ★ {item.feedbackRating.toFixed(1)}
+                        ★ {rating}
                       </span>
                     </div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                      {item.actualServed} Pax Served
+                      {served} Pax Served
                     </h3>
                   </div>
 
                   <div className="text-right">
                     <span className="text-xs font-bold text-rose-600 dark:text-rose-400 block">
-                      {item.foodWastageKg} kg Waste
+                      {item.foodWastageKg ?? 0} kg Waste
                     </span>
-                    <span className="text-[10px] text-slate-400">{item.contractorName}</span>
+                    <span className="text-[10px] text-slate-400">{contractor}</span>
                   </div>
                 </div>
 
                 {/* Headcount prediction accuracy bar */}
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
                   <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                    <span>AI Predicted: <strong>{item.predictedHeadcount} Pax</strong></span>
+                    <span>AI Predicted: <strong>{predicted} Pax</strong></span>
                     <span>Variance: <strong className={variance > 0 ? 'text-amber-600' : 'text-emerald-600'}>
                       {variance > 0 ? `+${variance}` : variance} Pax
                     </strong></span>
@@ -275,7 +281,7 @@ export const CafeteriaView: React.FC<Props> = ({ onBack, lang }) => {
                   <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                     <div
                       className="h-full bg-orange-500 rounded-full"
-                      style={{ width: `${Math.min(100, Math.round((item.actualServed / item.predictedHeadcount) * 100))}%` }}
+                      style={{ width: `${progress}%` }}
                     />
                   </div>
                 </div>

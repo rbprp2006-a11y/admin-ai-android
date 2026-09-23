@@ -59,7 +59,8 @@ export const HousekeepingView: React.FC<Props> = ({ onBack, lang }) => {
     setShift(item.shift);
     setAssignedStaff(item.assignedStaff);
     setSupervisor(item.supervisor);
-    setChecklistRaw(item.checklist.map(c => c.task).join('\n'));
+    const list = item.checklist || (item.checklists as any) || [];
+    setChecklistRaw(list.map((c: any) => c.task || c.label || '').join('\n'));
     setFormError('');
     setIsFormOpen(true);
   };
@@ -117,12 +118,14 @@ export const HousekeepingView: React.FC<Props> = ({ onBack, lang }) => {
   const handleToggleCheckItem = (taskId: string, checkItemId: string) => {
     const updated = tasks.map(t => {
       if (t.id === taskId) {
-        const nextChecklist = t.checklist.map(c => c.id === checkItemId ? { ...c, done: !c.done } : c);
-        const doneCount = nextChecklist.filter(c => c.done).length;
-        const pct = Math.round((doneCount / nextChecklist.length) * 100);
+        const currentList = t.checklist || (t.checklists as any) || [];
+        const nextChecklist = currentList.map((c: any) => c.id === checkItemId ? { ...c, done: !c.done } : c);
+        const doneCount = nextChecklist.filter((c: any) => c.done).length;
+        const pct = nextChecklist.length > 0 ? Math.round((doneCount / nextChecklist.length) * 100) : 0;
         return {
           ...t,
           checklist: nextChecklist,
+          checklists: nextChecklist,
           completionPercentage: pct,
           status: (pct === 100 ? 'Completed' : pct > 0 ? 'In Progress' : 'Scheduled') as HousekeepingTask['status']
         };
@@ -326,7 +329,7 @@ export const HousekeepingView: React.FC<Props> = ({ onBack, lang }) => {
                   Checklist Items (Tap to toggle)
                 </span>
                 <div className="grid grid-cols-1 gap-1.5">
-                  {item.checklist.map((chk) => (
+                  {(item.checklist || (item.checklists as any) || []).map((chk: any) => (
                     <div
                       key={chk.id}
                       onClick={() => handleToggleCheckItem(item.id, chk.id)}
@@ -338,7 +341,7 @@ export const HousekeepingView: React.FC<Props> = ({ onBack, lang }) => {
                         <Square className="w-4 h-4 text-slate-400 flex-shrink-0" />
                       )}
                       <span className={chk.done ? 'line-through text-slate-400' : ''}>
-                        {chk.task}
+                        {chk.task || chk.label}
                       </span>
                     </div>
                   ))}

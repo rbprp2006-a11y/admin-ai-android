@@ -1,23 +1,75 @@
+import { App as CapApp } from '@capacitor/app';
 import { InfrastructureService } from './infrastructureService';
 
 export class AndroidBridgeService {
   private static isInitialized = false;
+  private static backHandlerStack: (() => boolean)[] = [];
+
+  static registerBackHandler(handler: () => boolean): () => void {
+    this.backHandlerStack.push(handler);
+    return () => {
+      this.unregisterBackHandler(handler);
+    };
+  }
+
+  static unregisterBackHandler(handler: () => boolean): void {
+    const idx = this.backHandlerStack.lastIndexOf(handler);
+    if (idx !== -1) {
+      this.backHandlerStack.splice(idx, 1);
+    }
+  }
+
+  static executeBack(): boolean {
+    if (this.backHandlerStack.length > 0) {
+      // Execute top-most handler
+      const handler = this.backHandlerStack[this.backHandlerStack.length - 1];
+      try {
+        const handled = handler();
+        if (handled) return true;
+      } catch (err) {
+        console.error('Error in back handler:', err);
+      }
+    }
+    return false;
+  }
+
+  static exitApp(): void {
+    try {
+      CapApp.exitApp();
+    } catch {
+      window.close();
+    }
+  }
 
   static init(onHardwareBack?: () => boolean): void {
+    if (onHardwareBack) {
+      this.registerBackHandler(onHardwareBack);
+    }
+
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    // 1. Android Hardware Back Button Hook
-    window.addEventListener('popstate', (e) => {
-      if (onHardwareBack) {
-        const handled = onHardwareBack();
-        if (handled) {
-          e.preventDefault();
+    // 1. Android Capacitor Hardware Back Button Hook
+    try {
+      CapApp.addListener('backButton', () => {
+        const handled = this.executeBack();
+        if (!handled) {
+          // At root level with no more history
         }
+      });
+    } catch (err) {
+      console.warn('Capacitor App listener not active in browser environment', err);
+    }
+
+    // 2. Web browser popstate fallback
+    window.addEventListener('popstate', (e) => {
+      const handled = this.executeBack();
+      if (handled) {
+        e.preventDefault();
       }
     });
 
-    // 2. Connectivity Listeners (Online / Offline detection)
+    // 3. Connectivity Listeners (Online / Offline detection)
     window.addEventListener('online', () => {
       InfrastructureService.addLog({
         category: 'Android Runtime',
@@ -38,7 +90,7 @@ export class AndroidBridgeService {
     InfrastructureService.addLog({
       category: 'Android Runtime',
       level: 'INFO',
-      message: 'Android Bridge Service initialized (Back navigation, Network listeners & Storage Sandbox active)'
+      message: 'Android Bridge Service initialized (Native Capacitor backButton, Network listeners & Storage Sandbox active)'
     });
   }
 

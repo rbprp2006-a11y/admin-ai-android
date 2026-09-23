@@ -29,7 +29,7 @@ export const WebPortalView: React.FC<WebPortalViewProps> = ({ onBack, onNavigate
   const meetings = StorageService.getMeetingBookings();
   const vendors = StorageService.getVendorRecords();
 
-  const pendingPasses = passes.filter(p => p.approvalStatus === 'Pending');
+  const pendingPasses = passes.filter(p => p.approvalStatus === 'Pending Approval' || (p.approvalStatus as string) === 'Pending');
   const openTickets = tickets.filter(t => t.status !== 'Resolved');
 
   const handleApprovePass = (passId: string) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Wrench, Users, Bus, PackageCheck, Briefcase, CalendarCheck2, 
   ShieldCheck, Sparkles, Zap, UtensilsCrossed, FileText, Search, 
@@ -40,9 +40,11 @@ import { UtilitiesEnergyView } from './modules/UtilitiesEnergyView';
 import { CafeteriaView } from './modules/CafeteriaView';
 import { DocumentAiView } from './modules/DocumentAiView';
 
-// Modals
+// Modals & Boundaries
 import { SearchModal } from './components/SearchModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { ExitConfirmationModal } from './components/ExitConfirmationModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export type AppView = ModuleId | 'dashboard' | 'channels' | 'kiosk_mode' | 'voice_assistant' | 'web_portal_mode' | 'ai_agents' | 'integrations' | 'infrastructure';
 
@@ -56,6 +58,7 @@ export const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AppView>('dashboard');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
 
   // Sync theme class
   useEffect(() => {
@@ -68,16 +71,46 @@ export const App: React.FC = () => {
     }
   }, [isDark]);
 
-  // Android hardware back button and network connectivity listeners
+  // Unified Android hardware & UI back navigation handler
+  const handleBack = useCallback(() => {
+    // 1. If Exit Modal open, close it
+    if (isExitConfirmOpen) {
+      setIsExitConfirmOpen(false);
+      return true;
+    }
+    // 2. If Reset Confirm Modal open, close it
+    if (isResetConfirmOpen) {
+      setIsResetConfirmOpen(false);
+      return true;
+    }
+    // 3. If Search Modal open, close it
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+      return true;
+    }
+    // 4. If in nested channel view, go back to channels
+    if (['kiosk_mode', 'voice_assistant', 'web_portal_mode'].includes(activeModule)) {
+      setActiveModule('channels');
+      return true;
+    }
+    // 5. If in any module screen, return to dashboard
+    if (activeModule !== 'dashboard') {
+      setActiveModule('dashboard');
+      return true;
+    }
+    // 6. If already on dashboard, trigger exit confirmation modal
+    setIsExitConfirmOpen(true);
+    return true;
+  }, [isExitConfirmOpen, isResetConfirmOpen, isSearchOpen, activeModule]);
+
+  // Sync back handler with AndroidBridgeService (Capacitor + Browser popstate)
   useEffect(() => {
-    AndroidBridgeService.init(() => {
-      if (activeModule !== 'dashboard') {
-        setActiveModule('dashboard');
-        return true;
-      }
-      return false;
-    });
-  }, [activeModule]);
+    AndroidBridgeService.init();
+    const unregister = AndroidBridgeService.registerBackHandler(handleBack);
+    return () => {
+      unregister();
+    };
+  }, [handleBack]);
 
   const handleLangChange = (newLang: Language) => {
     setLang(newLang);
@@ -99,9 +132,9 @@ export const App: React.FC = () => {
   const allocatedAssets = StorageService.getAssetRecords().filter(x => x.lifecycleStage === 'Allocated').length;
   const activeVendors = StorageService.getVendorRecords().filter(x => x.amcStatus === 'Active').length;
   const confirmedMeetings = StorageService.getMeetingBookings().filter(x => x.status === 'Confirmed' || x.status === 'In Session').length;
-  const pendingPasses = StorageService.getGatePasses().filter(x => x.approvalStatus === 'Pending').length;
-  const activeHousekeeping = StorageService.getHousekeepingTasks().filter(x => x.status !== 'Completed').length;
-  const surgeUtilities = StorageService.getUtilityLogs().filter(x => x.status.includes('Surge')).length;
+  const pendingPasses = StorageService.getGatePasses().filter(x => x.approvalStatus === 'Pending Approval' || (x.approvalStatus as string) === 'Pending').length;
+  const activeHousekeeping = StorageService.getHousekeepingTasks().filter(x => x.status !== 'Completed' && (x.status as string) !== 'Supervised & Passed').length;
+  const surgeUtilities = StorageService.getUtilityLogs().filter(x => (x.status || '').includes('Surge') || x.peakAlertTriggered).length;
   const cafeteriaMeals = StorageService.getCafeteriaLogs().reduce((acc, curr) => acc + (curr.actualServed || 0), 0);
   const documentCount = StorageService.getDocumentRecords().length;
 
@@ -687,11 +720,14 @@ export const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* Render Active Sub-Module Screen */
-          <div>
+          /* Render Active Sub-Module Screen wrapped in Crash-Proof ErrorBoundary */
+          <ErrorBoundary
+            fallbackTitle="Module Screen Recovery"
+            onReset={() => setActiveModule('dashboard')}
+          >
             {activeModule === 'channels' && (
               <UserAccessChannelsView 
-                onBack={() => setActiveModule('dashboard')} 
+                onBack={handleBack} 
                 onLaunchKiosk={() => setActiveModule('kiosk_mode')}
                 onLaunchVoiceAssistant={() => setActiveModule('voice_assistant')}
                 onLaunchWebPortal={() => setActiveModule('web_portal_mode')}
@@ -700,75 +736,75 @@ export const App: React.FC = () => {
               />
             )}
             {activeModule === 'kiosk_mode' && (
-              <KioskTouchView onBack={() => setActiveModule('channels')} lang={lang} />
+              <KioskTouchView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'voice_assistant' && (
               <VoiceAssistantView 
-                onBack={() => setActiveModule('channels')} 
+                onBack={handleBack} 
                 onNavigateToModule={(modId) => setActiveModule(modId)}
                 lang={lang} 
               />
             )}
             {activeModule === 'web_portal_mode' && (
               <WebPortalView 
-                onBack={() => setActiveModule('channels')} 
+                onBack={handleBack} 
                 onNavigateToModule={(modId) => setActiveModule(modId)}
                 lang={lang} 
               />
             )}
             {activeModule === 'facility' && (
-              <FacilityMaintenanceView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <FacilityMaintenanceView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'visitor' && (
-              <VisitorManagementView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <VisitorManagementView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'transport' && (
-              <TransportManagementView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <TransportManagementView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'asset' && (
-              <AssetManagementView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <AssetManagementView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'vendor' && (
-              <VendorManagementView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <VendorManagementView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'meeting' && (
-              <MeetingRoomView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <MeetingRoomView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'gatepass' && (
-              <GatePassView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <GatePassView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'housekeeping' && (
-              <HousekeepingView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <HousekeepingView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'utilities' && (
-              <UtilitiesEnergyView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <UtilitiesEnergyView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'cafeteria' && (
-              <CafeteriaView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <CafeteriaView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'document' && (
-              <DocumentAiView onBack={() => setActiveModule('dashboard')} lang={lang} />
+              <DocumentAiView onBack={handleBack} lang={lang} />
             )}
             {activeModule === 'ai_agents' && (
               <AiAgentsDashboardView
-                onBack={() => setActiveModule('dashboard')}
+                onBack={handleBack}
                 onNavigateToModule={(modId) => setActiveModule(modId)}
                 lang={lang}
               />
             )}
             {activeModule === 'integrations' && (
               <IntegrationManagementView
-                onBack={() => setActiveModule('dashboard')}
+                onBack={handleBack}
                 lang={lang}
               />
             )}
             {activeModule === 'infrastructure' && (
               <InfrastructureMonitoringView
-                onBack={() => setActiveModule('dashboard')}
+                onBack={handleBack}
                 lang={lang}
               />
             )}
-          </div>
+          </ErrorBoundary>
         )}
       </main>
 
@@ -889,6 +925,13 @@ export const App: React.FC = () => {
         message="This will reset all 11 modules back to the initial sample enterprise records. Any created tickets or entries will be restored to defaults."
         onConfirm={handleResetData}
         onCancel={() => setIsResetConfirmOpen(false)}
+      />
+
+      {/* Android Exit Confirmation Modal */}
+      <ExitConfirmationModal
+        isOpen={isExitConfirmOpen}
+        onConfirm={() => AndroidBridgeService.exitApp()}
+        onCancel={() => setIsExitConfirmOpen(false)}
       />
     </div>
   );

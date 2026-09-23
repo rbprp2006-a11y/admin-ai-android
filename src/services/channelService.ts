@@ -506,7 +506,7 @@ export class ChannelService {
 
     // 4. Check pending approvals
     if (text.includes('approval') || text.includes('pending') || text.includes('pass') || text.includes('मंजुरी')) {
-      const passes = StorageService.getGatePasses().filter(p => p.approvalStatus === 'Pending');
+      const passes = StorageService.getGatePasses().filter(p => p.approvalStatus === 'Pending Approval' || (p.approvalStatus as string) === 'Pending');
       return {
         query: commandText,
         detectedIntent: 'check_pending_approvals',

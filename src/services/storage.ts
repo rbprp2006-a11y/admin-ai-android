@@ -269,18 +269,27 @@ const initialHousekeepingTasks: HousekeepingTask[] = [
   {
     id: 'HK-8001',
     areaZone: 'Wing A - 3rd Floor Workstation & Washroom Zone',
+    areaName: 'Wing A - 3rd Floor Workstation & Washroom Zone',
     shift: 'Morning (07:00 - 15:00)',
     supervisor: 'Sunita Kambale',
     assignedStaff: 'Kavita M. & Rahul D.',
     checklists: [
-      { id: '1', label: 'Dust and sanitize all meeting table surfaces', done: true },
-      { id: '2', label: 'Restock paper towels and automated soap dispensers', done: true },
-      { id: '3', label: 'Empty waste segregation bins (dry & wet)', done: true },
-      { id: '4', label: 'HEPA floor vacuuming & disinfectant mop', done: false }
+      { id: '1', label: 'Dust and sanitize all meeting table surfaces', task: 'Dust and sanitize all meeting table surfaces', done: true },
+      { id: '2', label: 'Restock paper towels and automated soap dispensers', task: 'Restock paper towels and automated soap dispensers', done: true },
+      { id: '3', label: 'Empty waste segregation bins (dry & wet)', task: 'Empty waste segregation bins (dry & wet)', done: true },
+      { id: '4', label: 'HEPA floor vacuuming & disinfectant mop', task: 'HEPA floor vacuuming & disinfectant mop', done: false }
+    ],
+    checklist: [
+      { id: '1', label: 'Dust and sanitize all meeting table surfaces', task: 'Dust and sanitize all meeting table surfaces', done: true },
+      { id: '2', label: 'Restock paper towels and automated soap dispensers', task: 'Restock paper towels and automated soap dispensers', done: true },
+      { id: '3', label: 'Empty waste segregation bins (dry & wet)', task: 'Empty waste segregation bins (dry & wet)', done: true },
+      { id: '4', label: 'HEPA floor vacuuming & disinfectant mop', task: 'HEPA floor vacuuming & disinfectant mop', done: false }
     ],
     completionPercentage: 75,
     status: 'In Progress',
+    supervisorSignoff: false,
     inspectionNotes: 'Floor mopping delayed due to morning townhall; scheduled at 11:30 AM.',
+    inspectionTimeSlot: '11:30 AM',
     updatedAt: new Date().toISOString(),
   }
 ];
@@ -314,16 +323,34 @@ const initialUtilityLogs: UtilityMeterLog[] = [
 
 const initialCafeteriaLogs: CafeteriaDailyLog[] = [
   {
-    id: 'CAF-10001',
+    id: 'CAF-1001',
     date: new Date().toISOString().split('T')[0],
-    mealType: 'Executive Lunch',
-    expectedHeadcount: 420,
-    actualServed: 395,
-    foodWastageKg: 8.4,
+    mealType: 'Lunch',
+    predictedHeadcount: 500,
+    expectedHeadcount: 500,
+    actualServed: 480,
+    foodWastageKg: 10.5,
+    contractorName: 'Sodexo Food Solutions',
+    feedbackRating: 4.3,
     costPerMeal: 135,
     wasteReductionRate: 92.5,
     status: 'Optimal',
-    notes: 'AI predicted headcount matched within 6% deviation.'
+    notes: 'AI predicted headcount matched within 4% variance.'
+  },
+  {
+    id: 'CAF-1002',
+    date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    mealType: 'Breakfast',
+    predictedHeadcount: 250,
+    expectedHeadcount: 250,
+    actualServed: 242,
+    foodWastageKg: 4.2,
+    contractorName: 'Sodexo Food Solutions',
+    feedbackRating: 4.5,
+    costPerMeal: 85,
+    wasteReductionRate: 95.0,
+    status: 'Optimal',
+    notes: 'Breakfast counter operated with minimal wastage.'
   }
 ];
 
@@ -489,8 +516,77 @@ export const StorageService = {
   saveUtilityLogs: (data: UtilityMeterLog[]) => setStored(STORAGE_KEYS.UTILITIES, data),
 
   // Cafeteria AI
-  getCafeteriaLogs: (): CafeteriaDailyLog[] => getStored(STORAGE_KEYS.CAFETERIA, initialCafeteriaLogs),
+  getCafeteriaLogs: (): CafeteriaDailyLog[] => {
+    const raw = getStored(STORAGE_KEYS.CAFETERIA, initialCafeteriaLogs);
+    return raw.map((item: any) => ({
+      ...item,
+      mealType: item.mealType || 'Lunch',
+      predictedHeadcount: item.predictedHeadcount ?? item.expectedHeadcount ?? 500,
+      expectedHeadcount: item.expectedHeadcount ?? item.predictedHeadcount ?? 500,
+      actualServed: item.actualServed ?? 480,
+      foodWastageKg: item.foodWastageKg ?? 10.5,
+      contractorName: item.contractorName || 'Sodexo Food Solutions',
+      feedbackRating: item.feedbackRating ?? 4.3,
+      status: item.status || 'Optimal',
+      date: item.date || new Date().toISOString().split('T')[0]
+    }));
+  },
   saveCafeteriaLogs: (data: CafeteriaDailyLog[]) => setStored(STORAGE_KEYS.CAFETERIA, data),
+
+  // Cross-service aliases and convenience methods
+  getTickets: (): FacilityTicket[] => StorageService.getFacilityTickets(),
+  saveTickets: (data: FacilityTicket[]) => StorageService.saveFacilityTickets(data),
+  addFacilityTicket: (ticket: FacilityTicket) => {
+    const all = StorageService.getFacilityTickets();
+    StorageService.saveFacilityTickets([ticket, ...all]);
+  },
+  updateFacilityTicket: (ticketOrId: FacilityTicket | string, partial?: Partial<FacilityTicket>) => {
+    const all = StorageService.getFacilityTickets();
+    if (typeof ticketOrId === 'string') {
+      const updated = all.map(t => t.id === ticketOrId ? { ...t, ...partial } : t);
+      StorageService.saveFacilityTickets(updated);
+    } else {
+      const updated = all.map(t => t.id === ticketOrId.id ? ticketOrId : t);
+      StorageService.saveFacilityTickets(updated);
+    }
+  },
+
+  getVisitors: (): VisitorRecord[] => StorageService.getVisitorRecords(),
+  addVisitorRecord: (record: VisitorRecord) => {
+    const all = StorageService.getVisitorRecords();
+    StorageService.saveVisitorRecords([record, ...all]);
+  },
+  updateVisitorRecord: (recordOrId: VisitorRecord | string, partial?: Partial<VisitorRecord>) => {
+    const all = StorageService.getVisitorRecords();
+    if (typeof recordOrId === 'string') {
+      const updated = all.map(v => v.id === recordOrId ? { ...v, ...partial } : v);
+      StorageService.saveVisitorRecords(updated);
+    } else {
+      const updated = all.map(v => v.id === recordOrId.id ? recordOrId : v);
+      StorageService.saveVisitorRecords(updated);
+    }
+  },
+
+  getAssets: (): AssetRecord[] => StorageService.getAssetRecords(),
+  getVendors: (): VendorRecord[] => StorageService.getVendorRecords(),
+  getTrips: (): TransportBooking[] => StorageService.getTransportBookings(),
+  getRooms: (): MeetingRoomBooking[] => StorageService.getMeetingBookings(),
+
+  getPasses: (): GatePassRecord[] => StorageService.getGatePasses(),
+  updateGatePass: (passOrId: GatePassRecord | string, partial?: Partial<GatePassRecord>) => {
+    const all = StorageService.getGatePasses();
+    if (typeof passOrId === 'string') {
+      const updated = all.map(p => p.id === passOrId ? { ...p, ...partial } : p);
+      StorageService.saveGatePasses(updated);
+    } else {
+      const updated = all.map(p => p.id === passOrId.id ? passOrId : p);
+      StorageService.saveGatePasses(updated);
+    }
+  },
+
+  getUtilities: (): UtilityMeterLog[] => StorageService.getUtilityLogs(),
+  getMeals: (): CafeteriaDailyLog[] => StorageService.getCafeteriaLogs(),
+  getDocuments: (): DocumentAiRecord[] => StorageService.getDocumentRecords(),
 
   // Document AI
   getDocumentRecords: (): DocumentAiRecord[] => getStored(STORAGE_KEYS.DOCUMENT, initialDocumentRecords),

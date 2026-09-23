@@ -27,13 +27,21 @@ export class GeminiService {
       ].filter(Boolean).join('\n\n');
 
       const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-      const response = await ai.models.generateContent({
+
+      // Race with timeout so server never hangs if internet is slow/unreachable
+      const generatePromise = ai.models.generateContent({
         model: modelName,
         contents,
         config: {
           systemInstruction
         }
       });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Gemini API call timed out after 5000ms')), 5000)
+      );
+
+      const response = await Promise.race([generatePromise, timeoutPromise]);
 
       return {
         mode: 'gemini',

@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -6,17 +6,94 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure data folder exists
+// Ensure server/data folder exists
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
 export const dbPath = path.join(dataDir, 'admin-ai.db');
-export const db = new Database(dbPath);
 
-// Enable WAL mode for better concurrency and performance
-db.pragma('journal_mode = WAL');
+// Initialize WebAssembly-powered SQLite (Zero native C++ build tools required on Windows)
+const SQL = await initSqlJs();
+
+let existingBuffer = null;
+if (fs.existsSync(dbPath)) {
+  try {
+    const buf = fs.readFileSync(dbPath);
+    if (buf.length > 0) {
+      existingBuffer = buf;
+    }
+  } catch (e) {
+    console.warn('[SQLite] Could not read existing db, starting fresh:', e.message);
+  }
+}
+
+const rawDb = existingBuffer ? new SQL.Database(existingBuffer) : new SQL.Database();
+
+export function saveDatabaseToDisk() {
+  try {
+    const data = rawDb.export();
+    fs.writeFileSync(dbPath, Buffer.from(data));
+  } catch (err) {
+    console.error('[SQLite] Error writing database to disk:', err.message);
+  }
+}
+
+// Better-sqlite3 compatible API wrapper
+export const db = {
+  pragma(pragmaStr) {
+    try {
+      rawDb.exec(`PRAGMA ${pragmaStr};`);
+    } catch (e) {
+      // Safe pragma ignore
+    }
+  },
+
+  exec(sql) {
+    rawDb.exec(sql);
+    saveDatabaseToDisk();
+  },
+
+  prepare(sql) {
+    return {
+      all(...args) {
+        const flatArgs = (args.length === 1 && Array.isArray(args[0])) ? args[0] : args;
+        const stmt = rawDb.prepare(sql);
+        if (flatArgs && flatArgs.length > 0) {
+          stmt.bind(flatArgs);
+        }
+        const results = [];
+        while (stmt.step()) {
+          results.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return results;
+      },
+
+      get(...args) {
+        const flatArgs = (args.length === 1 && Array.isArray(args[0])) ? args[0] : args;
+        const stmt = rawDb.prepare(sql);
+        if (flatArgs && flatArgs.length > 0) {
+          stmt.bind(flatArgs);
+        }
+        let result = undefined;
+        if (stmt.step()) {
+          result = stmt.getAsObject();
+        }
+        stmt.free();
+        return result;
+      },
+
+      run(...args) {
+        const flatArgs = (args.length === 1 && Array.isArray(args[0])) ? args[0] : args;
+        rawDb.run(sql, flatArgs && flatArgs.length > 0 ? flatArgs : undefined);
+        saveDatabaseToDisk();
+        return { changes: rawDb.getRowsModified() };
+      }
+    };
+  }
+};
 
 export function initDatabase() {
   // 1. Cafeteria Table (Pilot Module)
@@ -201,7 +278,7 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
   `);
 
-  // Admin Core Tables: users, roles, audit_logs, ai_activity, settings
+  // Core System Tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -247,8 +324,10 @@ export function initDatabase() {
     );
   `);
 
-  // Seed initial sample cafeteria data if empty
-  const count = db.prepare('SELECT COUNT(*) as cnt FROM cafeteria').get().cnt;
+  // Seed sample cafeteria logs if table is empty
+  const countRow = db.prepare('SELECT COUNT(*) as cnt FROM cafeteria').get();
+  const count = countRow ? countRow.cnt : 0;
+
   if (count === 0) {
     const seedStmt = db.prepare(`
       INSERT INTO cafeteria (
